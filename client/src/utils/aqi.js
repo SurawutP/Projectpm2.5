@@ -1,7 +1,7 @@
-export function getPMLevel(pm) {
-  if (pm <= 12) return { level: 'ดีมาก', color: 'green' };
-  if (pm <= 35.4) return { level: 'ปานกลาง', color: 'goldenrod' };
-  if (pm <= 55.4) return { level: 'เริ่มมีผลต่อสุขภาพ', color: 'orange' };
-  if (pm <= 150.4) return { level: 'ไม่ดี', color: 'red' };
-  return { level: 'อันตราย', color: 'purple' };
+export function getPMLevel(value) {
+  if (value <= 15.0)   return { level: 'ดีมาก', color: '#33CCFF' };
+  if (value <= 25.0)   return { level: 'ดี', color: '#22c55e' };
+  if (value <= 37.5)   return { level: 'ปานกลาง', color: '#eab308' };
+  if (value <= 75)     return { level: 'เริ่มมีผลต่อสุขภาพ', color: '#f97316' };
+  return { level: 'มีผลต่อสุขภาพ', color: '#ef4444' };
 }

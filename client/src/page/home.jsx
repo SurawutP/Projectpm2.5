@@ -24,24 +24,22 @@ export default function Home() {
         <ul className="space-y-1">
           <li className="flex items-center gap-2">
             <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: 'green' }}></span>
-            ดีมาก: 0 - 12
+            ดีมาก
           </li>
           <li className="flex items-center gap-2">
             <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: 'goldenrod' }}></span>
-            ปานกลาง: 12.1 - 35.4
+            ปานกลาง
           </li>
           <li className="flex items-center gap-2">
             <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: 'orange' }}></span>
-            เริ่มมีผลต่อสุขภาพ: 35.5 - 55.4
+            เริ่มมีผลต่อสุขภาพ
           </li>
           <li className="flex items-center gap-2">
             <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: 'red' }}></span>
-            ไม่ดี: 55.5 - 150.4
+            ไม่ดี
           </li>
-          <li className="flex items-center gap-2">
-            <span className="inline-block w-4 h-4 rounded" style={{ backgroundColor: 'purple' }}></span>
-            อันตราย: 150.4 ขึ้นไป
-          </li>
+          
+    
         </ul>
       </div>
     </div>
