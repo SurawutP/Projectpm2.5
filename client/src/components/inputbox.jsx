@@ -1,5 +1,4 @@
-// InputMap.jsx
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -15,38 +14,71 @@ const markerIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+function MapClickHandler({ addMarker }) {
+  useMapEvents({
+    click(e) {
+      addMarker(e.latlng);
+    },
+  });
+  return null;
+}
+
 export default function InputMap() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [hour, setHour] = useState(0);
-  const [area, setArea] = useState('');
-  const [position, setPosition] = useState(null);
-  const [result, setResult] = useState(null);
-  const markerRef = useRef(null);
+  const [markers, setMarkers] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
 
-  const handleMapClick = (e) => {
-    setPosition({ lat: e.latlng.lat.toFixed(6), lng: e.latlng.lng.toFixed(6) });
-    setResult(null);
+  const now = new Date();
+  const selectedDate = new Date(date + 'T00:00:00');
+  const isToday =
+    now.getFullYear() === selectedDate.getFullYear() &&
+    now.getMonth() === selectedDate.getMonth() &&
+    now.getDate() === selectedDate.getDate();
+  const isBeforeToday = selectedDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const currentHour = now.getHours();
+  const disableSimulateBtn = isBeforeToday || (isToday && hour < currentHour);
+
+  const addMarker = (latlng) => {
+    const newMarker = {
+      id: Date.now(),
+      lat: latlng.lat.toFixed(6),
+      lng: latlng.lng.toFixed(6),
+      area: '',
+      result: null,
+    };
+    setMarkers((prev) => [...prev, newMarker]);
+    setSelectedId(newMarker.id);
   };
 
-  function MapClickHandler() {
-    useMapEvents({
-      click: handleMapClick,
-    });
-    return null;
-  }
+  const removeMarker = (id) => {
+    setMarkers((prev) => prev.filter((m) => m.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const updateArea = (val) => {
+    setMarkers((prev) =>
+      prev.map((m) => (m.id === selectedId ? { ...m, area: val, result: null } : m))
+    );
+  };
 
   const simulate = async () => {
-    if (!position) return alert('กรุณาคลิกตำแหน่งบนแผนที่');
-    const areaRai = parseFloat(area);
+    if (disableSimulateBtn) return alert('ไม่สามารถจำลองเวลาที่ผ่านมาได้');
+    const marker = markers.find((m) => m.id === selectedId);
+    if (!marker) return alert('กรุณาเลือกหมุด');
+    if (!marker.lat || !marker.lng) return alert('ตำแหน่งไม่ถูกต้อง');
+    const areaRai = parseFloat(marker.area);
     if (!areaRai || areaRai <= 0) return alert('กรุณากรอกขนาดพื้นที่ (>0)');
 
     const url =
-      `https://api.open-meteo.com/v1/forecast?latitude=${position.lat}&longitude=${position.lng}` +
+      `https://api.open-meteo.com/v1/forecast?latitude=${marker.lat}&longitude=${marker.lng}` +
       `&hourly=wind_speed_10m,wind_direction_10m,boundary_layer_height&timezone=Asia%2FBangkok&start_date=${date}&end_date=${date}&wind_speed_unit=ms`;
 
     try {
       const js = await fetch(url).then((r) => r.json());
-      const idx = js.hourly?.time?.findIndex((t) => t === `${date}T${hour.toString().padStart(2, '0')}:00`);
+      const idx = js.hourly?.time?.findIndex(
+        (t) => t === `${date}T${hour.toString().padStart(2, '0')}:00`
+      );
       if (idx === -1) throw 'ไม่พบข้อมูลชั่วโมงที่เลือก';
 
       const U = js.hourly.wind_speed_10m?.[idx];
@@ -62,7 +94,11 @@ export default function InputMap() {
       const C0ug = C0mg * 1000;
       const level = getPMLevel(C0ug);
 
-      setResult({ C0ug, U, b, dir, level });
+      const newResult = { C0ug, U, b, dir, level };
+
+      setMarkers((prev) =>
+        prev.map((m) => (m.id === selectedId ? { ...m, result: newResult } : m))
+      );
     } catch (err) {
       alert('เกิดข้อผิดพลาด: ' + err);
       console.error(err);
@@ -70,113 +106,168 @@ export default function InputMap() {
   };
 
   const clearAll = () => {
-    setPosition(null);
-    setArea('');
-    setResult(null);
+    setMarkers([]);
+    setSelectedId(null);
   };
 
+  const selectedMarker = markers.find((m) => m.id === selectedId);
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-xl shadow">
-        <div>
-          <label className="font-semibold block mb-1">เลือกวันที่</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border rounded w-full px-3 py-1"
-          />
-        </div>
-        <div>
-          <label className="font-semibold block mb-1">เลือกชั่วโมง</label>
-          <select
-            value={hour}
-            onChange={(e) => setHour(Number(e.target.value))}
-            className="border rounded w-full px-3 py-1"
-          >
-            {Array.from({ length: 24 }, (_, i) => (
-              <option key={i} value={i}>
-                {i.toString().padStart(2, '0')}:00
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="font-semibold block mb-1">ขนาดพื้นที่เผา (ไร่)</label>
-          <input
-            type="number"
-            min="1"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="border rounded w-full px-3 py-1"
-          />
-        </div>
-        <div className="flex items-end">
-          <button
-            onClick={simulate}
-            className="bg-green-600 hover:bg-green-700 text-white w-full rounded px-4 py-2"
-          >
-            จำลองผลกระทบ
-          </button>
+    <div className="container mx-auto p-4 space-y-6">
+      {/* Control Panel */}
+      <div className="bg-white p-6 rounded-lg shadow-lg">
+        <h2 className="text-xl font-bold mb-4">ตั้งค่าการจำลอง</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
+            <input
+              type="date"
+              value={date}
+              max={now.toISOString().slice(0, 10)}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ชั่วโมง</label>
+            <select
+              value={hour}
+              onChange={(e) => setHour(Number(e.target.value))}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {Array.from({ length: 24 }, (_, i) => {
+                const isPastHour = isBeforeToday || (isToday && i < currentHour);
+                return (
+                  <option key={i} value={i} disabled={isPastHour} className={isPastHour ? 'text-gray-400' : ''}>
+                    {i.toString().padStart(2, '0')}:00
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ขนาดพื้นที่ (ไร่)</label>
+            <input
+              type="number"
+              min="1"
+              value={selectedMarker?.area ?? ''}
+              onChange={(e) => updateArea(e.target.value)}
+              disabled={!selectedMarker}
+              placeholder={selectedMarker ? '' : 'เลือกหมุดก่อน'}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <button
+              onClick={simulate}
+              disabled={disableSimulateBtn || !selectedMarker}
+              className="w-full bg-green-600 text-white rounded-md px-4 py-2 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              จำลองผลกระทบ
+            </button>
+            <button
+              onClick={clearAll}
+              className="w-full border border-gray-300 text-gray-700 rounded-md px-4 py-2 hover:bg-gray-100"
+            >
+              ล้างทั้งหมด
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl shadow">
-        <input
-          readOnly
-          placeholder="Lat"
-          value={position?.lat ?? ''}
-          className="border rounded px-3 py-1 bg-gray-100"
-        />
-        <input
-          readOnly
-          placeholder="Lng"
-          value={position?.lng ?? ''}
-          className="border rounded px-3 py-1 bg-gray-100"
-        />
+      {/* Map */}
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        <MapContainer
+          center={[13.736717, 100.523186]}
+          zoom={8}
+          style={{ height: '500px' }}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="© OpenStreetMap contributors"
+          />
+          <MapClickHandler addMarker={addMarker} />
+          {markers.map((m) => (
+            <Marker
+              key={m.id}
+              position={[m.lat, m.lng]}
+              icon={markerIcon}
+              eventHandlers={{
+                click: () => setSelectedId(m.id),
+              }}
+            >
+              {m.result && (
+                <Popup>
+                  <div className="text-sm space-y-1">
+                    <div>
+                      <strong>เวลา:</strong> {hour.toString().padStart(2, '0')}:00
+                    </div>
+                    <div>
+                      <strong>ความเร็วลม:</strong> {m.result.U.toFixed(2)} m/s
+                    </div>
+                    <div>
+                      <strong>ความสูงชั้นขอบเขต:</strong> {m.result.b.toFixed(0)} m
+                    </div>
+                    <div>
+                      <strong>ทิศลม:</strong> {m.result.dir ?? '--'}°
+                    </div>
+                    <div>
+                      <strong>PM2.5:</strong> {m.result.C0ug.toFixed(1)} µg/m³
+                    </div>
+                    <div>
+12                    <strong>ระดับ:</strong>{' '}
+                      <span style={{ color: m.result.level.color }}>{m.result.level.level}</span>
+                    </div>
+                  </div>
+                </Popup>
+              )}
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
 
-      <MapContainer center={[13.736717, 100.523186]} zoom={8} style={{ height: '500px' }} className="rounded-xl shadow">
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
-        <MapClickHandler />
-        {position && (
-          <Marker position={[position.lat, position.lng]} icon={markerIcon} ref={markerRef}>
-            {result && (
-              <Popup>
-                <div className="text-sm">
-                  ⏰ <strong>เวลา:</strong> {hour.toString().padStart(2, '0')}:00<br />
-                  🌬️ <strong>U:</strong> {result.U.toFixed(2)} m/s<br />
-                  ⛰️ <strong>b:</strong> {result.b.toFixed(0)} m<br />
-                  🧭 <strong>ทิศลม:</strong> {result.dir ?? '--'}°<br />
-                  📦 <strong>PM2.5:</strong> {result.C0ug.toFixed(1)} µg/m³<br />
-                  🌫️ <strong>ระดับ:</strong>{' '}
-                  <span style={{ color: result.level.color }}>{result.level.level}</span>
+      {/* Marker List */}
+      {markers.length > 0 && (
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h2 className="text-xl font-bold mb-4">รายการหมุด</h2>
+          <ul className="space-y-2 max-h-64 overflow-auto">
+            {markers.map((m) => (
+              <li
+                key={m.id}
+                className={`border p-3 rounded-lg cursor-pointer flex justify-between items-center transition-colors ${
+                  m.id === selectedId ? 'bg-green-50' : 'hover:bg-gray-50'
+                }`}
+                onClick={() => setSelectedId(m.id)}
+              >
+                <div>
+                  <div className="font-medium">พิกัด: {m.lat}, {m.lng}</div>
+                  <div className="text-sm text-gray-600">
+                    ขนาดพื้นที่: {m.area || '-'} ไร่{' '}
+                    {m.result && (
+                      <>
+                        | PM2.5:{' '}
+                        <span style={{ color: m.result.level.color }}>
+                          {m.result.C0ug.toFixed(1)} µg/m³
+                        </span>{' '}
+                        ({m.result.level.level})
+                      </>
+                    )}
+                  </div>
                 </div>
-              </Popup>
-            )}
-          </Marker>
-        )}
-      </MapContainer>
-
-      {result && (
-        <div className="bg-white p-4 rounded-xl shadow text-sm">
-          <h2 className="font-semibold mb-2">ผลการจำลอง</h2>
-          วันที่: {date} เวลา {hour.toString().padStart(2, '0')}:00<br />
-          พิกัด: {position.lat}, {position.lng}<br />
-          พื้นที่เผา: {area} ไร่ ({(parseFloat(area) * 0.39525691699605).toFixed(2)} acre)<br />
-          U = {result.U.toFixed(2)} m/s &nbsp;|&nbsp; b = {result.b.toFixed(0)} m<br />
-          PM2.5 ≈ <span className="font-bold">{result.C0ug.toFixed(1)} µg/m³</span> (<span style={{ color: result.level.color }}>{result.level.level}</span>)
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeMarker(m.id);
+                  }}
+                  className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
+                >
+                  ลบ
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-
-      <div className="text-right">
-        <button
-          onClick={clearAll}
-          className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-        >
-          ล้างข้อมูล
-        </button>
-      </div>
     </div>
   );
 }
